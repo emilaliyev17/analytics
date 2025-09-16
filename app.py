@@ -2,30 +2,65 @@ import streamlit as st
 import psycopg2
 import pandas as pd
 import os
-import hmac
+import hashlib
 from datetime import datetime, timedelta
 
 # Authentication
 def check_password():
-    """Returns True if the user had correct username/password."""
+    """Returns True if user has correct credentials from database."""
+    
+    def hash_password(password):
+        """Create SHA-256 hash of the password."""
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def verify_credentials(username, password):
+        """Verify credentials against database."""
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            
+            # Get user from database
+            cursor.execute(
+                "SELECT password_hash, role FROM users WHERE username = %s",
+                (username,)
+            )
+            result = cursor.fetchone()
+            
+            cursor.close()
+            conn.close()
+            
+            if result:
+                stored_hash, role = result
+                # Compare password hash
+                if stored_hash == hash_password(password):
+                    return True, role
+            
+            return False, None
+            
+        except Exception as e:
+            st.error(f"Database error: {str(e)}")
+            return False, None
     
     def credentials_entered():
-        """Checks whether username and password entered are correct."""
-        # Temporary hardcoded credentials - CHANGE THESE!
-        correct_username = "emil.aliyev"
-        correct_password = "Amir@2013"
+        """Check credentials when entered."""
+        username = st.session_state["username"]
+        password = st.session_state["password"]
         
-        if (st.session_state["username"] == correct_username and
-            st.session_state["password"] == correct_password):
+        is_valid, role = verify_credentials(username, password)
+        
+        if is_valid:
             st.session_state["password_correct"] = True
+            st.session_state["logged_in_user"] = username
+            st.session_state["user_role"] = role
             del st.session_state["password"]
             del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
-
+    
+    # Return True if already logged in
     if st.session_state.get("password_correct", False):
         return True
-
+    
     # Show login form
     st.title("🔐 Login to Sunco Analytics")
     st.text_input("Username", on_change=credentials_entered, key="username")
@@ -33,6 +68,7 @@ def check_password():
     
     if "password_correct" in st.session_state and not st.session_state["password_correct"]:
         st.error("😕 Incorrect username or password")
+    
     return False
 
 # Check authentication before showing the app
