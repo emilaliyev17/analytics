@@ -46,47 +46,30 @@ def check_password():
     
     def verify_credentials(username, password):
         """Verify credentials against database."""
-        
-        # Add debug output
-        st.sidebar.write(f"Debug: Checking user {username}")
-        
-        # Temporary hardcoded admin access for debugging
-        if username == "emil.aliyev" and password == "Amir@2013":
-            st.sidebar.success("Debug: Using hardcoded admin access")
-            return True, "admin"
-        
         try:
             conn = get_connection()
             cursor = conn.cursor()
             
-            # Check what's in the database
-            cursor.execute("SELECT username, password_hash FROM users")
-            all_users = cursor.fetchall()
-            st.sidebar.write(f"Debug: Users in DB: {all_users}")
-            
-            # Check specific user
+            # Get user from database
             cursor.execute(
                 "SELECT password_hash, role FROM users WHERE username = %s",
                 (username,)
             )
             result = cursor.fetchone()
             
-            if result:
-                stored_hash, role = result
-                entered_hash = hash_password(password)
-                st.sidebar.write(f"Debug: Stored hash: {stored_hash[:20]}...")
-                st.sidebar.write(f"Debug: Entered hash: {entered_hash[:20]}...")
-                
-                if stored_hash == entered_hash:
-                    return True, role
-            
             cursor.close()
             conn.close()
             
+            if result:
+                stored_hash, role = result
+                # Compare password hash
+                if stored_hash == hash_password(password):
+                    return True, role
+            
+            return False, None
+            
         except Exception as e:
-            st.sidebar.error(f"Database error: {str(e)}")
-        
-        return False, None
+            return False, None
     
     def credentials_entered():
         """Check credentials when entered."""
