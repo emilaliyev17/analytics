@@ -5,10 +5,6 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 
-# Check authentication before showing the app
-if not check_password():
-    st.stop()
-
 st.set_page_config(page_title="Sunco Analytics", layout="wide")
 
 # Database connection - don't cache the connection itself
@@ -121,6 +117,10 @@ def check_password():
         st.error("😕 Incorrect username or password")
     
     return False
+
+# Check authentication before showing the app
+if not check_password():
+    st.stop()
 
 # Title
 st.title("🚲 Sunco Analytics Dashboard")
