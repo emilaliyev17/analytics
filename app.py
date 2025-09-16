@@ -2,7 +2,42 @@ import streamlit as st
 import psycopg2
 import pandas as pd
 import os
+import hmac
 from datetime import datetime, timedelta
+
+# Authentication
+def check_password():
+    """Returns True if the user had correct username/password."""
+    
+    def credentials_entered():
+        """Checks whether username and password entered are correct."""
+        # Temporary hardcoded credentials - CHANGE THESE!
+        correct_username = "emil.aliyev"
+        correct_password = "Amir@2013"
+        
+        if (st.session_state["username"] == correct_username and
+            st.session_state["password"] == correct_password):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+            del st.session_state["username"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show login form
+    st.title("🔐 Login to Sunco Analytics")
+    st.text_input("Username", on_change=credentials_entered, key="username")
+    st.text_input("Password", type="password", on_change=credentials_entered, key="password")
+    
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("😕 Incorrect username or password")
+    return False
+
+# Check authentication before showing the app
+if not check_password():
+    st.stop()
 
 st.set_page_config(page_title="Sunco Analytics", layout="wide")
 
