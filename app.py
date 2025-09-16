@@ -5,72 +5,6 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 
-# Authentication
-def check_password():
-    """Returns True if user has correct credentials from database."""
-    
-    def hash_password(password):
-        """Create SHA-256 hash of the password."""
-        return hashlib.sha256(password.encode()).hexdigest()
-    
-    def verify_credentials(username, password):
-        """Verify credentials against database."""
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            
-            # Get user from database
-            cursor.execute(
-                "SELECT password_hash, role FROM users WHERE username = %s",
-                (username,)
-            )
-            result = cursor.fetchone()
-            
-            cursor.close()
-            conn.close()
-            
-            if result:
-                stored_hash, role = result
-                # Compare password hash
-                if stored_hash == hash_password(password):
-                    return True, role
-            
-            return False, None
-            
-        except Exception as e:
-            st.error(f"Database error: {str(e)}")
-            return False, None
-    
-    def credentials_entered():
-        """Check credentials when entered."""
-        username = st.session_state["username"]
-        password = st.session_state["password"]
-        
-        is_valid, role = verify_credentials(username, password)
-        
-        if is_valid:
-            st.session_state["password_correct"] = True
-            st.session_state["logged_in_user"] = username
-            st.session_state["user_role"] = role
-            del st.session_state["password"]
-            del st.session_state["username"]
-        else:
-            st.session_state["password_correct"] = False
-    
-    # Return True if already logged in
-    if st.session_state.get("password_correct", False):
-        return True
-    
-    # Show login form
-    st.title("🔐 Login to Sunco Analytics")
-    st.text_input("Username", on_change=credentials_entered, key="username")
-    st.text_input("Password", type="password", on_change=credentials_entered, key="password")
-    
-    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
-        st.error("😕 Incorrect username or password")
-    
-    return False
-
 # Check authentication before showing the app
 if not check_password():
     st.stop()
@@ -106,6 +40,88 @@ def load_data(query):
     conn.close()
     return df
 
+# Authentication
+def check_password():
+    """Returns True if user has correct credentials from database."""
+    
+    def hash_password(password):
+        """Create SHA-256 hash of the password."""
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def verify_credentials(username, password):
+        """Verify credentials against database."""
+        
+        # Add debug output
+        st.sidebar.write(f"Debug: Checking user {username}")
+        
+        # Temporary hardcoded admin access for debugging
+        if username == "emil.aliyev" and password == "Amir@2013":
+            st.sidebar.success("Debug: Using hardcoded admin access")
+            return True, "admin"
+        
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            
+            # Check what's in the database
+            cursor.execute("SELECT username, password_hash FROM users")
+            all_users = cursor.fetchall()
+            st.sidebar.write(f"Debug: Users in DB: {all_users}")
+            
+            # Check specific user
+            cursor.execute(
+                "SELECT password_hash, role FROM users WHERE username = %s",
+                (username,)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                stored_hash, role = result
+                entered_hash = hash_password(password)
+                st.sidebar.write(f"Debug: Stored hash: {stored_hash[:20]}...")
+                st.sidebar.write(f"Debug: Entered hash: {entered_hash[:20]}...")
+                
+                if stored_hash == entered_hash:
+                    return True, role
+            
+            cursor.close()
+            conn.close()
+            
+        except Exception as e:
+            st.sidebar.error(f"Database error: {str(e)}")
+        
+        return False, None
+    
+    def credentials_entered():
+        """Check credentials when entered."""
+        username = st.session_state["username"]
+        password = st.session_state["password"]
+        
+        is_valid, role = verify_credentials(username, password)
+        
+        if is_valid:
+            st.session_state["password_correct"] = True
+            st.session_state["logged_in_user"] = username
+            st.session_state["user_role"] = role
+            del st.session_state["password"]
+            del st.session_state["username"]
+        else:
+            st.session_state["password_correct"] = False
+    
+    # Return True if already logged in
+    if st.session_state.get("password_correct", False):
+        return True
+    
+    # Show login form
+    st.title("🔐 Login to Sunco Analytics")
+    st.text_input("Username", on_change=credentials_entered, key="username")
+    st.text_input("Password", type="password", on_change=credentials_entered, key="password")
+    
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("😕 Incorrect username or password")
+    
+    return False
+
 # Title
 st.title("🚲 Sunco Analytics Dashboard")
 
@@ -132,6 +148,56 @@ report_type = st.sidebar.selectbox(
     "Select Report",
     ["Overview", "Best Sellers", "Worst Sellers", "Sales Trend", "Seasonal Analysis", "Product Performance by Launch Date", "Launch Period Analysis"]
 )
+
+# Admin panel in sidebar (only for admin users)
+if st.session_state.get("user_role") == "admin":
+    st.sidebar.divider()
+    st.sidebar.header("👤 User Management")
+    
+    # Add new user section
+    with st.sidebar.expander("Add New User"):
+        new_username = st.text_input("Username", key="new_user")
+        new_password = st.text_input("Password", type="password", key="new_pass")
+        new_role = st.selectbox("Role", ["user", "admin"], key="new_role")
+        
+        if st.button("Add User"):
+            if new_username and new_password:
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    
+                    # Hash the password
+                    import hashlib
+                    password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+                    
+                    # Insert new user
+                    cursor.execute(
+                        "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+                        (new_username, password_hash, new_role)
+                    )
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    
+                    st.sidebar.success(f"✅ User {new_username} added!")
+                except Exception as e:
+                    st.sidebar.error(f"Error: {str(e)}")
+            else:
+                st.sidebar.error("Please fill all fields")
+    
+    # View existing users
+    if st.sidebar.button("View All Users"):
+        try:
+            conn = get_connection()
+            users_df = pd.read_sql_query(
+                "SELECT username, role, created_at FROM users ORDER BY created_at DESC",
+                conn
+            )
+            conn.close()
+            st.subheader("System Users")
+            st.dataframe(users_df, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.error(f"Error loading users: {str(e)}")
 
 # Main content
 if report_type == "Overview":
